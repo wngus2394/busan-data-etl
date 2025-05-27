@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<configuration>
+    <property name="LOGS_PATH" value="./spring_log/local"/>
+    <property name="TARGET" value="DATA_ETL_WAS"/>
+
+    <appender name="consoleAppender" class="ch.qos.logback.core.ConsoleAppender">
+        <layout class="ch.qos.logback.classic.PatternLayout">
+            <pattern>[%highlight(%-5level)][${TARGET}|%thread][%d{yyyy-MM-dd HH:mm:ss.SSS}][%cyan(%F/%M)] - %msg%n</pattern>
+        </layout>
+    </appender>
+
+    <appender name="dailyRollingFileAppender" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <encoder>
+            <charset>UTF-8</charset>
+            <pattern>[%-5level][${TARGET}|%thread][%d{yyyy-MM-dd HH:mm:ss.SSS}][%F/%M] - %msg%n</pattern>
+        </encoder>
+
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOGS_PATH}/%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxHistory>100</maxHistory>
+            <maxFileSize>500MB</maxFileSize>
+        </rollingPolicy>
+    </appender>
+
+    <root level="info">
+        <appender-ref ref="consoleAppender"/>
+        <appender-ref ref="dailyRollingFileAppender"/>
+    </root>
+
+    <logger name="com.busan.dataetl" level="debug" additivity="false">
+        <appender-ref ref="consoleAppender"/>
+        <appender-ref ref="dailyRollingFileAppender"/>
+    </logger>
+
+</configuration>
