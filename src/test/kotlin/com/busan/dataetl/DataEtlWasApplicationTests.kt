@@ -27,7 +27,7 @@ class DataEtlWasApplicationTests {
             .withQuoteChar('"') // 인용부호
             .build()
 
-        val reader = CSVReaderBuilder(FileReader(csvFile, StandardCharsets.UTF_8))
+        val readerBuilder = CSVReaderBuilder(FileReader(csvFile, StandardCharsets.UTF_8))
             .withCSVParser(parser)
             .build()
 
@@ -35,7 +35,7 @@ class DataEtlWasApplicationTests {
         var successCount = 0
         var failCount = 0
 
-        reader.use { reader ->
+        readerBuilder.use { reader ->
             val header = reader.readNext() ?: return
             header[0] = header[0].replace("\uFEFF", "") // BOM 제거
 
