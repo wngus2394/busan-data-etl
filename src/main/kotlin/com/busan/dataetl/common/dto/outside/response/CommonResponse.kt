@@ -1,7 +1,7 @@
 package com.busan.dataetl.common.dto.outside.response
 
 import com.fasterxml.jackson.annotation.JsonProperty
-import com.suteuk.orderplus.common.exception.ServerException
+import com.busan.dataetl.common.exception.ServerException
 
 data class CommonResponse(
     @JsonProperty("success")

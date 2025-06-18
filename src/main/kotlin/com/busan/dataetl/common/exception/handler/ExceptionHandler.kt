@@ -1,8 +1,8 @@
 package com.busan.dataetl.common.exception.handler
 
 import com.busan.dataetl.common.dto.Error
-import com.suteuk.orderplus.common.exception.BadRequestException
-import com.suteuk.orderplus.common.exception.ServerException
+import com.busan.dataetl.common.exception.BadRequestException
+import com.busan.dataetl.common.exception.ServerException
 import org.slf4j.LoggerFactory
 import org.springframework.boot.web.error.ErrorAttributeOptions
 import org.springframework.http.HttpStatus

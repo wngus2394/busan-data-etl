@@ -7,6 +7,12 @@ fun String.extractRootFolder(): String =
     this.substringBefore('/', missingDelimiterValue = "")
 
 /**
+ * Object Storage Key 두 번째 폴더 추출 (출처)
+ */
+fun String.extractSource(): String? =
+    this.split("/").getOrNull(1)
+
+/**
  * Object Storage Key 경로 추출
  */
 fun String.extractPath(): String =

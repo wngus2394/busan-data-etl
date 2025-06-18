@@ -1,4 +1,4 @@
-package com.suteuk.orderplus.common.exception
+package com.busan.dataetl.common.exception
 
 /**
  * 400 Exception

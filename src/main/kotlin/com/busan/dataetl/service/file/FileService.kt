@@ -2,19 +2,23 @@ package com.busan.dataetl.service.file
 
 import com.busan.dataetl.api.UploaderAPI
 import com.busan.dataetl.common.dto.PageableResponse
-import com.busan.dataetl.common.dto.S3Object
+import com.busan.dataetl.common.dto.file.MetaData
+import com.busan.dataetl.common.dto.file.S3Object
 import com.busan.dataetl.common.dto.file.request.AddManualUploadFileRequest
 import com.busan.dataetl.common.dto.file.request.AddUploadFileRequest
 import com.busan.dataetl.common.dto.file.request.GetFileRequest
 import com.busan.dataetl.common.dto.file.response.GetFileResponse
 import com.busan.dataetl.common.extension.extractRootFolder
+import com.busan.dataetl.common.extension.extractSource
 import com.busan.dataetl.common.extension.safeToInt
 import com.busan.dataetl.common.function.validateParams
 import com.busan.dataetl.common.type.SecurityLevel
+import com.busan.dataetl.util.CsvUtil
 import com.busan.dataetl.util.FileUtil
 import com.busan.dataetl.util.StorageUtil
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
+import java.util.*
 
 /**
  * 파일 기능 처리 서비스 영역
@@ -40,10 +44,11 @@ class FileService {
         val result = fileList.map {
             GetFileResponse(
                 bucketName = bucketName,
-                rootFolder = it.rootFolder,
                 filePath = it.filePath,
+                fileSource = it.fileSource,
                 fileName = it.fileName,
-                fileSize = it.fileSize
+                fileSize = it.fileSize,
+                fileRating = it.fileRating
             )
         }
 
@@ -63,15 +68,22 @@ class FileService {
         validateParams(bucketName)
 
         val fileList = StorageUtil.getObjectList(bucketName)
+        val metadataList = mutableListOf<MetaData>()
         var failCount = 0
 
         fileList.forEach { file ->
-            try {
-                processFile(bucketName, file)
-            } catch (e: Exception) {
+            runCatching {
+                val metadata = processFile(bucketName, file)
+                metadata?.let { metadataList += it }
+            }.onFailure { e ->
                 logger.error("File processing failed >> {}/{} - {}", file.filePath, file.fileName, e.localizedMessage)
                 failCount++
             }
+        }
+
+        // 메타데이터 추출
+        if (metaExtractStatus) {
+            saveToMetadataFile(metadataList, metaSaveFilePath)
         }
 
         // 실패 처리 파일 확인
@@ -92,48 +104,86 @@ class FileService {
         // 파라미터 체크
         validateParams(bucketName, fileList)
 
+        val metadataList = mutableListOf<MetaData>()
         fileList.forEach { data ->
-            try {
-                val metadata = StorageUtil.getObjectMetadata(bucketName, data.storageFullPath, data.fileName)
-                val rootFolder = data.storageFullPath.extractRootFolder()
-                val fileSize = metadata.contentLength.safeToInt()
+            runCatching {
+                val fileMetadata = StorageUtil.getObjectMetadata(bucketName, data.storageFullPath, data.fileName)
+                val fileSize = fileMetadata.contentLength.safeToInt()
+                val fileSource = data.storageFullPath.extractSource()
+                val securityCode = data.storageFullPath.extractRootFolder()
+                    .substringAfterLast('_')
+                val securityLevel = SecurityLevel.convert(securityCode)
 
                 val fileObject = S3Object(
                     bucketName = bucketName,
-                    rootFolder = rootFolder,
                     filePath = data.storageFullPath,
+                    fileSource = fileSource,
                     fileName = data.fileName,
-                    fileSize = fileSize
+                    fileSize = fileSize,
+                    fileRating = securityLevel.level,
+                    uploadDateTime = null
                 )
 
-                processFile(bucketName, fileObject)
-            } catch (e: Exception) {
+
+                val metadata = processFile(bucketName, fileObject)
+                metadata?.let { metadataList += it }
+            }.onFailure { e ->
                 logger.error("File processing failed >> {} - {}", data.fileName, e.localizedMessage)
                 throw IllegalStateException("파일 처리 실패")
             }
         }
+
+        // 메타데이터 추출
+        if (metaExtractStatus) {
+            saveToMetadataFile(metadataList, metaSaveFilePath)
+        }
     }
 
     /**
-     * 파일 수집/저장 처리
+     * 파일 수집·저장 처리
      *
      * @param bucketName 버킷명
      * @param file 파일 정보 객체
+     * @return 메타데이터 객체
      */
-    private fun processFile(bucketName: String, file: S3Object) {
-        StorageUtil.tempFileDownload(bucketName, file.filePath, file.fileName) { safeFileName, tempFile ->
+    private fun processFile(bucketName: String, file: S3Object): MetaData? {
+        return StorageUtil.tempFileDownload(bucketName, file.filePath, file.fileName) { tempFile ->
+            val originalName = file.fileName
             val fileHash = FileUtil.calculateSHA256(tempFile.toPath())
-            val duplicateStatus = UploaderAPI.requestFileDuplicateCheck(safeFileName, fileHash)
+            val fileExtension = file.fileName.substringAfterLast('.', "")
+                .takeIf { it.isNotBlank() }
+                ?.uppercase(Locale.ROOT)
+                ?: "UNKNOWN"
 
+            val duplicateStatus = UploaderAPI.requestFileDuplicateCheck(originalName, fileHash)
             if (duplicateStatus) {
                 logger.warn("Duplicate File >> {}/{}", file.filePath, file.fileName)
-                return@tempFileDownload
+                return@tempFileDownload null
             }
 
-            val securityCode = file.rootFolder.substringAfterLast('_')
-            val securityLevel = SecurityLevel.convert(securityCode)
+            UploaderAPI.requestFileUpload(tempFile, originalName, file.fileSize, file.fileRating)
 
-            UploaderAPI.requestFileUpload(tempFile, safeFileName, file.fileSize, securityLevel.level)
-        }
+            MetaData(
+                filePath = file.filePath,
+                fileSource = file.fileSource,
+                fileName = file.fileName,
+                fileExtension = fileExtension,
+                fileSize = file.fileSize,
+                fileHash = fileHash,
+                fileRating = file.fileRating,
+                uploadDateTime = file.uploadDateTime
+            )
+        }.getOrNull()
+    }
+
+    /**
+     * 메타 데이터 저장
+     *
+     * @param metaDataList 메타데이터 리스트
+     * @param savePath 저장 경로 (파일명 포함)
+     */
+    private fun saveToMetadataFile(metaDataList: List<MetaData>, savePath: String?) {
+        val headerList = listOf("저장경로", "파일출처", "파일명", "문서유형 (확장자)", "파일크기(Byte)", "파일해시", "파일등급", "문서업로드 일시")
+        CsvUtil.saveCsvToFile(headerList, metaDataList, savePath)
     }
 }

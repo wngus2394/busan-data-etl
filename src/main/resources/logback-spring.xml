@@ -21,16 +21,46 @@
             <maxHistory>100</maxHistory>
             <maxFileSize>500MB</maxFileSize>
         </rollingPolicy>
+
+        <!-- ERROR 제외 -->
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>DENY</onMatch>
+            <onMismatch>ACCEPT</onMismatch>
+        </filter>
+    </appender>
+
+    <!-- 에러 로그: WARN ~ ERROR -->
+    <appender name="errorRollingFileAppender" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <encoder>
+            <charset>UTF-8</charset>
+            <pattern>[%highlight(%-5level)][${TARGET}|%thread][%d{yyyy-MM-dd HH:mm:ss.SSS}][%cyan(%F/%M)] - %msg%n</pattern>
+        </encoder>
+
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOGS_PATH}/error-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxHistory>100</maxHistory>
+            <maxFileSize>500MB</maxFileSize>
+        </rollingPolicy>
+
+        <!-- ERROR 만 포함 -->
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
     </appender>
 
     <root level="info">
         <appender-ref ref="consoleAppender"/>
         <appender-ref ref="dailyRollingFileAppender"/>
+        <appender-ref ref="errorRollingFileAppender"/>
     </root>
 
     <logger name="com.busan.dataetl" level="debug" additivity="false">
         <appender-ref ref="consoleAppender"/>
         <appender-ref ref="dailyRollingFileAppender"/>
+        <appender-ref ref="errorRollingFileAppender"/>
     </logger>
 
 </configuration>
